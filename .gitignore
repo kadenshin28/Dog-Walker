@@ -1,3 +1,5 @@
 node_modules
 uploads
 dogs.json
+location.json
+.DS_Store

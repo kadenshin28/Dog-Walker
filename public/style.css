@@ -1,0 +1,227 @@
+:root {
+  --bg: #fdf6ec;
+  --card: #ffffff;
+  --text: #3b2f2f;
+  --accent: #e07a3f;
+  --accent-dark: #c4622b;
+  --border: #e5d9c8;
+  --muted: #8a7a6a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 16px;
+}
+
+h1, h2 {
+  text-align: center;
+}
+
+/* White "card" look shared by forms and panels */
+form,
+#dogs-section,
+#after-save,
+.card {
+  background: var(--card);
+  max-width: 400px;
+  margin: 0 auto 24px;
+  padding: 20px;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Form fields */
+label {
+  display: block;
+  margin-top: 16px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px; /* 16px stops iPhone Safari from zooming in */
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: #fffdf9;
+  transition: border-color 0.2s;
+}
+
+input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ZIP code box: big, centered digits */
+#zip {
+  text-align: center;
+  font-size: 24px;
+  letter-spacing: 6px;
+}
+
+/* Picture area: placeholder circle + preview */
+.picture-area {
+  width: 160px;
+  height: 160px;
+  margin: 0 auto;
+}
+
+#placeholder {
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 64px;
+  background: #fffdf9;
+  border: 4px dashed var(--border);
+  border-radius: 50%;
+}
+
+#preview {
+  display: block;
+  width: 160px;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 4px solid var(--accent);
+}
+
+/* Makes the hidden attribute win over the display rules above */
+#placeholder[hidden],
+#preview[hidden],
+#after-save[hidden],
+#after-save-actions[hidden],
+form[hidden] {
+  display: none;
+}
+
+/* "Choose a photo" button */
+.upload-button {
+  display: block;
+  margin: 16px auto 0;
+  padding: 10px 18px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent-dark);
+  background: #fff3e6;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.upload-button:active {
+  transform: scale(0.98);
+}
+
+#file-name {
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
+/* Main orange button */
+.save-button {
+  width: 100%;
+  margin-top: 24px;
+  padding: 14px;
+  font-size: 17px;
+  font-weight: 700;
+  color: white;
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.save-button:hover {
+  background: var(--accent-dark);
+}
+
+.save-button:active {
+  transform: scale(0.98);
+}
+
+/* Status messages under forms */
+#message,
+#zip-message {
+  text-align: center;
+  min-height: 1.2em;
+}
+
+/* After-save panel */
+#after-save {
+  text-align: center;
+}
+
+#saved-message {
+  font-size: 20px;
+  font-weight: 600;
+  min-height: 1.5em;
+  margin: 0;
+  transition: opacity 0.5s;
+}
+
+#saved-message.fade-out {
+  opacity: 0;
+}
+
+/* Link styled like a button */
+.next-button {
+  display: block;
+  margin-top: 12px;
+  padding: 14px;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  color: var(--accent-dark);
+  background: #fff3e6;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+}
+
+.next-button:active {
+  transform: scale(0.98);
+}
+
+/* The card on the Location page only holds the back link */
+.card .next-button {
+  margin-top: 0;
+}
+
+/* Saved dogs list */
+#dog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#dog-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+#dog-list li:last-child {
+  border-bottom: none;
+}
+
+#dog-list img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 50%;
+}

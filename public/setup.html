@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Setup</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>🐕 Tell us about your dog</h1>
+
+  <form id="dog-form">
+    <div class="picture-area">
+      <div id="placeholder">🐶</div>
+      <img id="preview" alt="Dog picture preview" hidden>
+    </div>
+
+    <!-- The real file input is hidden; the button below opens it -->
+    <input type="file" id="picture" name="picture" accept="image/*" hidden>
+    <button type="button" id="choose-btn" class="upload-button">📷 Choose a photo</button>
+    <p id="file-name">No photo chosen</p>
+
+    <label for="dog-name">Dog's name</label>
+    <input type="text" id="dog-name" name="dogName" placeholder="e.g. Buddy" required>
+
+    <label for="breed">Breed</label>
+    <input type="text" id="breed" name="breed" placeholder="e.g. Golden Retriever" required>
+
+    <button type="submit" class="save-button">Save dog</button>
+    <p id="message"></p>
+  </form>
+
+  <!-- Shown after a dog is saved -->
+  <div id="after-save" hidden>
+    <p id="saved-message"></p>
+    <div id="after-save-actions" hidden>
+      <button type="button" id="add-another" class="save-button">➕ Add another dog</button>
+      <a href="/location" class="next-button">Next →</a>
+    </div>
+  </div>
+
+  <section id="dogs-section">
+    <h2>Your dogs</h2>
+    <ul id="dog-list"></ul>
+  </section>
+
+  <script>
+    const form = document.getElementById("dog-form");
+    const pictureInput = document.getElementById("picture");
+    const chooseBtn = document.getElementById("choose-btn");
+    const preview = document.getElementById("preview");
+    const placeholder = document.getElementById("placeholder");
+    const fileName = document.getElementById("file-name");
+    const message = document.getElementById("message");
+    const dogList = document.getElementById("dog-list");
+    const afterSave = document.getElementById("after-save");
+    const savedMessage = document.getElementById("saved-message");
+    const afterSaveActions = document.getElementById("after-save-actions");
+    const addAnotherBtn = document.getElementById("add-another");
+
+    // The button opens the hidden file picker
+    chooseBtn.addEventListener("click", () => {
+      pictureInput.click();
+    });
+
+    // Show a preview when a picture is chosen
+    pictureInput.addEventListener("change", () => {
+      const file = pictureInput.files[0];
+      if (file) {
+        preview.src = URL.createObjectURL(file);
+        preview.hidden = false;
+        placeholder.hidden = true;
+        fileName.textContent = file.name;
+      } else {
+        resetPicture();
+      }
+    });
+
+    function resetPicture() {
+      preview.hidden = true;
+      placeholder.hidden = false;
+      fileName.textContent = "No photo chosen";
+    }
+
+    // Send the form to the server
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      message.textContent = "Saving...";
+
+      try {
+        const response = await fetch("/api/dogs", {
+          method: "POST",
+          body: new FormData(form),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          message.textContent = data.error || "Something went wrong.";
+          return;
+        }
+
+        form.reset();
+        resetPicture();
+        message.textContent = "";
+        loadDogs();
+
+        // Hide the form and show the saved message
+        form.hidden = true;
+        afterSave.hidden = false;
+        afterSaveActions.hidden = true;
+        savedMessage.textContent = "Saved " + data.name + "! 🎉";
+        savedMessage.classList.remove("fade-out");
+
+        // After 1 second, fade the message out
+        setTimeout(() => {
+          savedMessage.classList.add("fade-out");
+        }, 1000);
+
+        // Once the fade finishes (0.5s), show the buttons
+        setTimeout(() => {
+          savedMessage.textContent = "";
+          afterSaveActions.hidden = false;
+        }, 1500);
+      } catch (err) {
+        message.textContent = "Could not reach the server.";
+      }
+    });
+
+    // "Add another dog" brings the form back
+    addAnotherBtn.addEventListener("click", () => {
+      afterSave.hidden = true;
+      form.hidden = false;
+    });
+
+    // Fetch and show saved dogs
+    async function loadDogs() {
+      const response = await fetch("/api/dogs");
+      const dogs = await response.json();
+      dogList.innerHTML = "";
+
+      for (const dog of dogs) {
+        const li = document.createElement("li");
+
+        if (dog.picture) {
+          const img = document.createElement("img");
+          img.src = dog.picture;
+          img.alt = dog.name;
+          li.appendChild(img);
+        }
+
+        const text = document.createElement("span");
+        text.textContent = dog.name + " (" + dog.breed + ")";
+        li.appendChild(text);
+
+        dogList.appendChild(li);
+      }
+    }
+
+    loadDogs();
+  </script>
+</body>
+</html>
