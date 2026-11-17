@@ -11,7 +11,7 @@
 
     <!-- Left sidebar: one profile card per dog -->
     <aside id="sidebar">
-      <h2>Your dogs</h2>
+      <h2>The Dog Pack</h2>
       <div id="dog-profiles"></div>
     </aside>
 
@@ -109,6 +109,8 @@
 
       if (temperature < 50) return namesText + " " + verb + " a sweater.";
       if (temperature > 75) return namesText + " " + verb + " water.";
+      if (temperature < 25) return "Keep " + namesText + "inside, it is way too cold.";
+      if (temperature > 85) return "Keep " + namesText + "inside, it is way too hot.";
       return ""; // 50 to 75 degrees: no tip
     }
 
