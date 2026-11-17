@@ -30,7 +30,18 @@ function readLocation() {
 function saveLocation(location) {
   fs.writeFileSync(locationFile, JSON.stringify(location, null, 2));
 }
-
+// Helpers for saved walks (safe if the file is empty or broken)
+function readWalks() {
+  try {
+    const text = fs.readFileSync(walksFile, "utf8").trim();
+    return text ? JSON.parse(text) : [];
+  } catch (err) {
+    return [];
+  }
+}
+function saveWalks(walks) {
+  fs.writeFileSync(walksFile, JSON.stringify(walks, null, 2));
+}
 // multer: save uploaded pictures to /uploads with a unique name
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
@@ -56,6 +67,11 @@ app.use(express.static("public"));
 app.use("/uploads", express.static(uploadsDir));
 
 // Pages
+
+app.get("/profile", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "profile.html"));
+});
+
 app.get("/", (req, res) => {
   const dogs = readDogs();
 
@@ -182,6 +198,75 @@ app.get("/api/weather", async (req, res) => {
     console.error("Weather error:", err);
     res.status(502).json({ error: "Could not get the weather." });
   }
+});
+const walksFile = path.join(__dirname, "walks.json");
+if (!fs.existsSync(walksFile)) fs.writeFileSync(walksFile, "[]");
+// API: list the saved walks for one dog
+app.get("/api/dogs/:id/walks", (req, res) => {
+  const walks = readWalks().filter((w) => String(w.dogId) === req.params.id);
+  res.json(walks);
+});
+
+// API: save a finished walk for one dog
+// Save a finished walk for one dog
+app.post("/api/dogs/:id/walks", (req, res) => {
+  const dog = readDogs().find((d) => String(d.id) === req.params.id);
+  if (!dog) {
+    return res.status(404).json({ error: "Dog not found." });
+  }
+
+  const seconds = Number(req.body.seconds);
+  const startedAt = Number(req.body.startedAt);
+
+  // Must be a real number between 1 second and 24 hours
+  if (!Number.isFinite(seconds) || seconds < 1 || seconds > 24 * 60 * 60) {
+    return res.status(400).json({ error: "That walk length doesn't look right." });
+  }
+  if (!Number.isFinite(startedAt)) {
+    return res.status(400).json({ error: "Missing the walk's start time." });
+  }
+
+  // Distance is optional (0 if GPS wasn't available), max about 124 miles
+  let meters = 0;
+  if (req.body.meters !== undefined) {
+    meters = Number(req.body.meters);
+    if (!Number.isFinite(meters) || meters < 0 || meters > 200000) {
+      return res.status(400).json({ error: "That distance doesn't look right." });
+    }
+  }
+
+  const walk = {
+    id: Date.now(),
+    dogId: dog.id,
+    startedAt,
+    seconds: Math.round(seconds),
+    meters: Math.round(meters),
+  };
+
+  const walks = readWalks();
+  walks.push(walk);
+  saveWalks(walks);
+
+  res.status(201).json(walk);
+});
+// API: total walking stats for each dog
+app.get("/api/stats", (req, res) => {
+  const dogs = readDogs();
+  const walks = readWalks();
+
+  const stats = dogs.map((dog) => {
+    const mine = walks.filter((w) => String(w.dogId) === String(dog.id));
+
+    return {
+      dogId: dog.id,
+      name: dog.name,
+      walks: mine.length,
+      seconds: mine.reduce((sum, w) => sum + (w.seconds || 0), 0),
+      meters: mine.reduce((sum, w) => sum + (w.meters || 0), 0),
+    };
+  });
+
+  res.json(stats);
 });
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);

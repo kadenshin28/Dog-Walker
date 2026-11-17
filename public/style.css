@@ -229,3 +229,225 @@ form[hidden] {
   text-align: center;
   font-size: 18px;
 }
+#tip {
+  font-weight: 700;
+  text-align: center;
+  color: var(--accent-dark);
+  margin-bottom: 0;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 400px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+#sidebar {
+  grid-column: 1;
+  justify-self: start;
+  width: 190px;
+  background: var(--card);
+  padding: 16px;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+main {
+  grid-column: 2;
+  min-width: 0;
+}
+
+#sidebar h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+
+@media (max-width: 900px) {
+  .layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  #sidebar {
+    width: 100%;
+  }
+
+  #dog-profiles {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+  }
+
+  .dog-link {
+    flex-shrink: 0;
+    margin-bottom: 0;
+  }
+}/* Sidebar dog cards */
+.dog-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.dog-link:hover {
+  background: #fff3e6;
+}
+
+.dog-link img,
+.dog-fallback {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent);
+}
+
+.dog-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fffdf9;
+  font-size: 22px;
+}
+
+/* Profile page */
+.profile-card {
+  text-align: center;
+}
+
+.profile-picture {
+  width: 160px;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 4px solid var(--accent);
+}
+
+.profile-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  background: #fffdf9;
+  font-size: 64px;
+}
+
+#profile-picture-area {
+  display: flex;
+  justify-content: center;
+}
+
+#profile-name {
+  margin-bottom: 4px;
+}
+
+#profile-breed {
+  margin-top: 0;
+  color: var(--muted);
+}
+/* Walk tracker */
+#tracker-card {
+  text-align: center;
+}
+
+#tracker-card[hidden] {
+  display: none;
+}
+
+#timer {
+  font-size: 48px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums; /* digits don't jiggle as they change */
+  margin: 8px 0 4px;
+}
+
+.save-button.stop-button {
+  background: #c0392b;
+}
+
+.save-button.stop-button:hover {
+  background: #a93226;
+}
+
+#tracker-message {
+  min-height: 1.2em;
+}
+
+#total-walked {
+  font-weight: 700;
+  color: var(--accent-dark);
+}
+
+#walk-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+#walk-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+#walk-list li:last-child {
+  border-bottom: none;
+}#distance {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent-dark);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 4px;
+}
+
+#gps-status {
+  min-height: 1.2em;
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+/* Walk stats card */
+#stats-card {
+  text-align: center;
+}
+
+#stats-card h2 {
+  margin-top: 0;
+}
+
+.stat-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.stat-row:last-child {
+  border-bottom: none;
+}
+
+.stat-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.stat-numbers {
+  color: var(--accent-dark);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.stat-sub {
+  color: var(--muted);
+  font-size: 14px;
+  margin-top: 2px;
+}

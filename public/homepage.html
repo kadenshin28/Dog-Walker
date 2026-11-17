@@ -7,38 +7,148 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <h1>Welcome back, <span id="dog-names">friend</span>! 🐕</h1>
+  <div class="layout">
 
-    <div class="card" id="weather-card">
-    <p id="weather">Loading weather...</p>
+    <!-- Left sidebar: one profile card per dog -->
+    <aside id="sidebar">
+      <h2>Your dogs</h2>
+      <div id="dog-profiles"></div>
+    </aside>
+
+    <!-- Main content, centered on the page -->
+    <main>
+      <h1>Welcome back, <span id="dog-names">friend</span>! 🐕</h1>
+
+      <div class="card" id="weather-card">
+        <p id="weather">Loading weather...</p>
+        <p id="tip"></p>
+      </div>
+
+      <div class="card" id="stats-card">
+        <h2>📊 Walk stats</h2>
+        <div id="stats-list">Loading stats...</div>
+      </div>
+    </main>
+
   </div>
 
   <script>
+    // Turns ["Buddy", "Luna", "Max"] into "Buddy, Luna, and Max"
     function joinNames(names) {
-  let result = "";
+      let result = "";
 
-  for (let i = 0; i < names.length; i++) {
-    result += names[i];
+      for (let i = 0; i < names.length; i++) {
+        result += names[i];
 
-    const isLast = i === names.length - 1;
-    const isSecondToLast = i === names.length - 2;
+        const isLast = i === names.length - 1;
+        const isSecondToLast = i === names.length - 2;
 
-    if (isLast) {
-      // nothing after the last name
-    } else if (isSecondToLast) {
-      // 2 names: "A and B", 3+ names: "A, B, and C"
-      result += names.length === 2 ? " and " : ", and ";
-    } else {
-      result += ", ";
+        if (isLast) {
+          // nothing after the last name
+        } else if (isSecondToLast) {
+          // 2 names: "A and B", 3+ names: "A, B, and C"
+          result += names.length === 2 ? " and " : ", and ";
+        } else {
+          result += ", ";
+        }
+      }
+
+      return result;
     }
-  }
 
-  return result;
-}
+    // 3725 seconds -> "1h 2m", 725 -> "12m 5s", 45 -> "45s"
+    function formatDuration(totalSeconds) {
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      if (h > 0) return h + "h " + m + "m";
+      if (m > 0) return m + "m " + s + "s";
+      return s + "s";
+    }
+
+    // 1609 meters -> "1.00 mi"
+    function formatMiles(meters) {
+      return (meters / 1609.344).toFixed(2) + " mi";
+    }
+
+    // Turns Open-Meteo's weather code into words that fit "with ___"
+    function describeWeather(code) {
+      if (code === 0) return "clear skies";
+      if (code === 1) return "mostly clear skies";
+      if (code === 2) return "partly cloudy skies";
+      if (code === 3) return "overcast skies";
+      if (code === 45 || code === 48) return "fog";
+      if (code >= 51 && code <= 57) return "drizzle";
+      if (code === 66 || code === 67) return "freezing rain";
+      if (code >= 61 && code <= 65) return "rain";
+      if (code >= 71 && code <= 77) return "snow";
+      if (code >= 80 && code <= 82) return "rain showers";
+      if (code === 85 || code === 86) return "snow showers";
+      if (code >= 95) return "thunderstorms";
+      return "unknown conditions";
+    }
+
+    // Extra sentence part about daylight (empty during the day)
+    function describeDaylight(daylight) {
+      if (daylight === "getting_dark") return "it's getting dark, bring a flashlight";
+      if (daylight === "dark") return "it's dark, if you walk, bring a flashlight";
+      if (daylight === "getting_bright") return "it's getting bright, wait a little bit";
+      return "";
+    }
+
+    // Tip about what the dogs need, based on the temperature
+    function describeTemp(temperature, names) {
+      if (names.length === 0) {
+        if (temperature < 50) return "Bring a sweater.";
+        if (temperature > 75) return "Bring water.";
+        return "";
+      }
+
+      const namesText = joinNames(names);
+      const verb = names.length === 1 ? "needs" : "need";
+
+      if (temperature < 50) return namesText + " " + verb + " a sweater.";
+      if (temperature > 75) return namesText + " " + verb + " water.";
+      return ""; // 50 to 75 degrees: no tip
+    }
+
+    // Builds the sidebar: one clickable card per dog
+    function showDogProfiles(dogs) {
+      const container = document.getElementById("dog-profiles");
+      container.innerHTML = "";
+
+      for (const dog of dogs) {
+        const link = document.createElement("a");
+        link.className = "dog-link";
+        link.href = "/profile?id=" + encodeURIComponent(dog.id);
+
+        if (dog.picture) {
+          const img = document.createElement("img");
+          img.src = dog.picture;
+          img.alt = dog.name;
+          link.appendChild(img);
+        } else {
+          const fallback = document.createElement("div");
+          fallback.className = "dog-fallback";
+          fallback.textContent = "🐶";
+          link.appendChild(fallback);
+        }
+
+        const name = document.createElement("span");
+        name.textContent = dog.name;
+        link.appendChild(name);
+
+        container.appendChild(link);
+      }
+    }
+
+    // Shows the dog names + sidebar, and returns the names as a list
     async function loadNames() {
       try {
         const response = await fetch("/api/dogs");
         const dogs = await response.json();
+
+        showDogProfiles(dogs);
 
         if (dogs.length > 0) {
           const names = dogs.map((dog) => dog.name);
@@ -46,77 +156,98 @@
 
           document.getElementById("dog-names").textContent = text;
           document.title = "Welcome Back " + text;
+          return names;
         }
       } catch (err) {
         // If it fails, the page keeps the default "friend"
       }
+      return [];
     }
 
-    loadNames();
-    async function loadWeather() {
-  const weatherEl = document.getElementById("weather");
+    async function loadWeather(names) {
+      const weatherEl = document.getElementById("weather");
+      const tipEl = document.getElementById("tip");
 
-  try {
-    const response = await fetch("/api/weather");
-    const data = await response.json();
+      try {
+        const response = await fetch("/api/weather");
+        const data = await response.json();
 
-    if (!response.ok) {
-      weatherEl.textContent = data.error;
-      return;
+        if (!response.ok) {
+          weatherEl.textContent = data.error;
+          return;
+        }
+
+        let sentence =
+          "It is " + data.temperature + " degrees with " +
+          describeWeather(data.code);
+
+        const daylightText = describeDaylight(data.daylight);
+        if (daylightText) {
+          sentence += ", " + daylightText;
+        }
+        weatherEl.textContent = sentence + ".";
+
+        tipEl.textContent = describeTemp(data.temperature, names);
+      } catch (err) {
+        weatherEl.textContent = "Weather unavailable right now.";
+      }
     }
 
-    weatherEl.textContent =
-      "It is " + data.temperature + " degrees with " + data.description + ".";
-  } catch (err) {
-    weatherEl.textContent = "Weather unavailable right now.";
-  }
-}
+    // Shows each dog's total time and miles walked
+    async function loadStats() {
+      const listEl = document.getElementById("stats-list");
 
-// Turns Open-Meteo's weather code into words that fit "It is 42 degrees with ___."
-function describeWeather(code) {
-  if (code === 0) return "clear skies";
-  if (code === 1) return "mostly clear skies";
-  if (code === 2) return "partly cloudy skies";
-  if (code === 3) return "overcast skies";
-  if (code === 45 || code === 48) return "fog";
-  if (code >= 51 && code <= 57) return "drizzle";
-  if (code === 66 || code === 67) return "freezing rain";
-  if (code >= 61 && code <= 65) return "rain";
-  if (code >= 71 && code <= 77) return "snow";
-  if (code >= 80 && code <= 82) return "rain showers";
-  if (code === 85 || code === 86) return "snow showers";
-  if (code >= 95) return "thunderstorms";
-  return "unknown conditions";
-}
+      try {
+        const response = await fetch("/api/stats");
+        const stats = await response.json();
 
-function describeDaylight(daylight) {
-  if (daylight === "getting_dark") return " It's getting dark , bring a flashlight.";
-  if (daylight === "dark") return " It's dark , if you walk , bring a flashlight.";
-  if (daylight === "getting_bright") return " It's getting bright , wait a little bit.";
-  return "";
-}
+        listEl.innerHTML = "";
 
-async function loadWeather() {
-  const weatherEl = document.getElementById("weather");
+        if (stats.length === 0) {
+          listEl.textContent = "Add a dog to see walk stats.";
+          return;
+        }
 
-  try {
-    const response = await fetch("/api/weather");
-    const data = await response.json();
+        for (const dog of stats) {
+          const row = document.createElement("div");
+          row.className = "stat-row";
 
-    if (!response.ok) {
-      weatherEl.textContent = data.error;
-      return;
+          const nameEl = document.createElement("div");
+          nameEl.className = "stat-name";
+          nameEl.textContent = dog.name;
+          row.appendChild(nameEl);
+
+          const numbersEl = document.createElement("div");
+          numbersEl.className = "stat-numbers";
+          const subEl = document.createElement("div");
+          subEl.className = "stat-sub";
+
+          if (dog.walks === 0) {
+            numbersEl.textContent = "No walks yet";
+          } else {
+            numbersEl.textContent =
+              "⏱ " + formatDuration(dog.seconds) + "   📍 " + formatMiles(dog.meters);
+            subEl.textContent =
+              dog.walks + (dog.walks === 1 ? " walk" : " walks");
+          }
+
+          row.appendChild(numbersEl);
+          if (subEl.textContent) row.appendChild(subEl);
+          listEl.appendChild(row);
+        }
+      } catch (err) {
+        listEl.textContent = "Could not load stats.";
+      }
     }
 
-    weatherEl.textContent =
-      weatherEl.textContent =
-  "It is " + data.temperature + " degrees with " + describeWeather(data.code) + "," + describeDaylight(data.daylight);
-  } catch (err) {
-    weatherEl.textContent = "Weather unavailable right now.";
-  }
-}
+    // Load the names first, then the weather and stats
+    async function start() {
+      const names = await loadNames();
+      await loadWeather(names);
+      await loadStats();
+    }
 
-loadWeather();
+    start();
   </script>
 </body>
 </html>
