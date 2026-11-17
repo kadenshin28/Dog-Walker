@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome Back</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>Welcome back, <span id="dog-names">friend</span>! 🐕</h1>
+
+    <div class="card" id="weather-card">
+    <p id="weather">Loading weather...</p>
+  </div>
+
+  <script>
+    function joinNames(names) {
+  let result = "";
+
+  for (let i = 0; i < names.length; i++) {
+    result += names[i];
+
+    const isLast = i === names.length - 1;
+    const isSecondToLast = i === names.length - 2;
+
+    if (isLast) {
+      // nothing after the last name
+    } else if (isSecondToLast) {
+      // 2 names: "A and B", 3+ names: "A, B, and C"
+      result += names.length === 2 ? " and " : ", and ";
+    } else {
+      result += ", ";
+    }
+  }
+
+  return result;
+}
+    async function loadNames() {
+      try {
+        const response = await fetch("/api/dogs");
+        const dogs = await response.json();
+
+        if (dogs.length > 0) {
+          const names = dogs.map((dog) => dog.name);
+          const text = joinNames(names);
+
+          document.getElementById("dog-names").textContent = text;
+          document.title = "Welcome Back " + text;
+        }
+      } catch (err) {
+        // If it fails, the page keeps the default "friend"
+      }
+    }
+
+    loadNames();
+    async function loadWeather() {
+  const weatherEl = document.getElementById("weather");
+
+  try {
+    const response = await fetch("/api/weather");
+    const data = await response.json();
+
+    if (!response.ok) {
+      weatherEl.textContent = data.error;
+      return;
+    }
+
+    weatherEl.textContent =
+      "It is " + data.temperature + " degrees with " + data.description + ".";
+  } catch (err) {
+    weatherEl.textContent = "Weather unavailable right now.";
+  }
+}
+
+// Turns Open-Meteo's weather code into words that fit "It is 42 degrees with ___."
+function describeWeather(code) {
+  if (code === 0) return "clear skies";
+  if (code === 1) return "mostly clear skies";
+  if (code === 2) return "partly cloudy skies";
+  if (code === 3) return "overcast skies";
+  if (code === 45 || code === 48) return "fog";
+  if (code >= 51 && code <= 57) return "drizzle";
+  if (code === 66 || code === 67) return "freezing rain";
+  if (code >= 61 && code <= 65) return "rain";
+  if (code >= 71 && code <= 77) return "snow";
+  if (code >= 80 && code <= 82) return "rain showers";
+  if (code === 85 || code === 86) return "snow showers";
+  if (code >= 95) return "thunderstorms";
+  return "unknown conditions";
+}
+
+function describeDaylight(daylight) {
+  if (daylight === "getting_dark") return " It's getting dark , bring a flashlight.";
+  if (daylight === "dark") return " It's dark , if you walk , bring a flashlight.";
+  if (daylight === "getting_bright") return " It's getting bright , wait a little bit.";
+  return "";
+}
+
+async function loadWeather() {
+  const weatherEl = document.getElementById("weather");
+
+  try {
+    const response = await fetch("/api/weather");
+    const data = await response.json();
+
+    if (!response.ok) {
+      weatherEl.textContent = data.error;
+      return;
+    }
+
+    weatherEl.textContent =
+      weatherEl.textContent =
+  "It is " + data.temperature + " degrees with " + describeWeather(data.code) + "," + describeDaylight(data.daylight);
+  } catch (err) {
+    weatherEl.textContent = "Weather unavailable right now.";
+  }
+}
+
+loadWeather();
+  </script>
+</body>
+</html>

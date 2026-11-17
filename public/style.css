@@ -225,3 +225,7 @@ form[hidden] {
   object-fit: cover;
   border-radius: 50%;
 }
+#weather-card {
+  text-align: center;
+  font-size: 18px;
+}

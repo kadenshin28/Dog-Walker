@@ -28,7 +28,7 @@
   </form>
 
   <div class="card">
-    <a href="/homepage" class="next-button">← Back to Setup</a>
+    <a href="/setup" class="next-button">← Back to Setup</a>
   </div>
 
   <script>
@@ -70,7 +70,7 @@
           return;
         }
 
-        zipMessage.textContent = "Saved ZIP " + data.zip + " ✓";
+        window.location.href = "/homepage";
       } catch (err) {
         zipMessage.textContent = "Could not reach the server.";
       }

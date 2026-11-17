@@ -57,7 +57,13 @@ app.use("/uploads", express.static(uploadsDir));
 
 // Pages
 app.get("/", (req, res) => {
-  res.redirect("/setup");
+  const dogs = readDogs();
+
+  if (dogs.length > 0) {
+    res.redirect("/homepage");   // returning user
+  } else {
+    res.redirect("/setup");      // first time, no dogs yet
+  }
 });
 
 app.get("/setup", (req, res) => {
@@ -66,6 +72,10 @@ app.get("/setup", (req, res) => {
 
 app.get("/location", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "location.html"));
+});
+
+app.get("/homepage", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "homepage.html"));
 });
 
 // API: list all dogs
@@ -114,7 +124,65 @@ app.post("/api/location", (req, res) => {
   saveLocation(location);
   res.json(location);
 });
+// API: current weather + daylight status for the saved ZIP code
+app.get("/api/weather", async (req, res) => {
+  const { zip } = readLocation();
+  if (!zip) {
+    return res.status(400).json({ error: "No ZIP code saved yet." });
+  }
 
+  try {
+    // 1. ZIP code -> city + coordinates
+    const zipResponse = await fetch(`https://api.zippopotam.us/us/${zip}`);
+    if (!zipResponse.ok) {
+      return res.status(404).json({ error: "ZIP code not found." });
+    }
+    const zipData = await zipResponse.json();
+    const place = zipData.places[0];
+
+    // 2. Coordinates -> current weather + today's sunrise/sunset
+    const weatherUrl =
+      "https://api.open-meteo.com/v1/forecast" +
+      `?latitude=${place.latitude}&longitude=${place.longitude}` +
+      "&current=temperature_2m,weather_code,wind_speed_10m" +
+      "&daily=sunrise,sunset" +
+      "&timezone=auto" +
+      "&temperature_unit=fahrenheit&wind_speed_unit=mph";
+
+    const weatherResponse = await fetch(weatherUrl);
+    if (!weatherResponse.ok) {
+      throw new Error("Weather service error");
+    }
+    const weather = await weatherResponse.json();
+
+    // 3. Work out the daylight status
+    const now = Date.parse(weather.current.time + "Z");
+    const sunrise = Date.parse(weather.daily.sunrise[0] + "Z");
+    const sunset = Date.parse(weather.daily.sunset[0] + "Z");
+    const HOUR = 60 * 60 * 1000;
+
+    let daylight;
+    if (now < sunrise) {
+      daylight = sunrise - now <= HOUR ? "getting_bright" : "dark";
+    } else if (now >= sunset) {
+      daylight = "dark";
+    } else {
+      daylight = sunset - now <= HOUR ? "getting_dark" : "day";
+    }
+
+    res.json({
+      city: place["place name"],
+      state: place["state abbreviation"],
+      temperature: Math.round(weather.current.temperature_2m),
+      windSpeed: Math.round(weather.current.wind_speed_10m),
+      code: weather.current.weather_code,
+      daylight,
+    });
+  } catch (err) {
+    console.error("Weather error:", err);
+    res.status(502).json({ error: "Could not get the weather." });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
