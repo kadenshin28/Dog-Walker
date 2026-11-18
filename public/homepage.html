@@ -10,11 +10,18 @@
   <div class="layout">
 
     <!-- Left sidebar: one profile card per dog -->
-    <aside id="sidebar">
+    <aside id="sidebarL">
       <h2>The Dog Pack</h2>
       <div id="dog-profiles"></div>
     </aside>
 
+       <!-- Right sidebar: communities nearby -->
+    <aside id="communities">
+      <h2>🏞️ Doggy Network</h2>
+      <p id="communities-sub" class="place-distance"></p>
+      <div id="communities-list">Looking nearby...</div>
+      <p class="attribution">Map data © OpenStreetMap contributors</p>
+    </aside>
     <!-- Main content, centered on the page -->
     <main>
       <h1>Welcome back, <span id="dog-names">friend</span>! 🐕</h1>
@@ -25,7 +32,7 @@
       </div>
 
       <div class="card" id="stats-card">
-        <h2>📊 Walk stats</h2>
+        <h2>📊 Total Walk Stats</h2>
         <div id="stats-list">Loading stats...</div>
       </div>
     </main>
@@ -106,11 +113,10 @@
 
       const namesText = joinNames(names);
       const verb = names.length === 1 ? "needs" : "need";
-
-      if (temperature < 50) return namesText + " " + verb + " a sweater.";
-      if (temperature > 75) return namesText + " " + verb + " water.";
       if (temperature < 25) return "Keep " + namesText + "inside, it is way too cold.";
+      if (temperature < 50) return namesText + " " + verb + " a sweater.";
       if (temperature > 85) return "Keep " + namesText + "inside, it is way too hot.";
+      if (temperature > 75) return namesText + " " + verb + " water.";
       return ""; // 50 to 75 degrees: no tip
     }
 
@@ -196,54 +202,116 @@
     }
 
     // Shows each dog's total time and miles walked
-    async function loadStats() {
-      const listEl = document.getElementById("stats-list");
+    // Shows each dog's total time and miles walked, as a table
+async function loadStats() {
+  const listEl = document.getElementById("stats-list");
 
-      try {
-        const response = await fetch("/api/stats");
-        const stats = await response.json();
+  try {
+    const response = await fetch("/api/stats");
+    const stats = await response.json();
 
-        listEl.innerHTML = "";
+    listEl.innerHTML = "";
 
-        if (stats.length === 0) {
-          listEl.textContent = "Add a dog to see walk stats.";
-          return;
-        }
-
-        for (const dog of stats) {
-          const row = document.createElement("div");
-          row.className = "stat-row";
-
-          const nameEl = document.createElement("div");
-          nameEl.className = "stat-name";
-          nameEl.textContent = dog.name;
-          row.appendChild(nameEl);
-
-          const numbersEl = document.createElement("div");
-          numbersEl.className = "stat-numbers";
-          const subEl = document.createElement("div");
-          subEl.className = "stat-sub";
-
-          if (dog.walks === 0) {
-            numbersEl.textContent = "No walks yet";
-          } else {
-            numbersEl.textContent =
-              "⏱ " + formatDuration(dog.seconds) + "   📍 " + formatMiles(dog.meters);
-            subEl.textContent =
-              dog.walks + (dog.walks === 1 ? " walk" : " walks");
-          }
-
-          row.appendChild(numbersEl);
-          if (subEl.textContent) row.appendChild(subEl);
-          listEl.appendChild(row);
-        }
-      } catch (err) {
-        listEl.textContent = "Could not load stats.";
-      }
+    if (stats.length === 0) {
+      listEl.textContent = "Add a dog to see walk stats.";
+      return;
     }
+
+    const table = document.createElement("table");
+    table.className = "stats-table";
+
+    // Header row
+    const headRow = table.createTHead().insertRow();
+    for (const label of ["Dog", "Time", "Miles", "Walks"]) {
+      const th = document.createElement("th");
+      th.textContent = label;
+      headRow.appendChild(th);
+    }
+
+    // One row per dog
+    const body = table.createTBody();
+    for (const dog of stats) {
+      const row = body.insertRow();
+
+      // The name links to that dog's profile
+      const nameCell = row.insertCell();
+      const link = document.createElement("a");
+      link.href = "/profile?id=" + encodeURIComponent(dog.dogId);
+      link.textContent = dog.name;
+      nameCell.appendChild(link);
+
+      const hasWalks = dog.walks > 0;
+      row.insertCell().textContent = hasWalks ? formatDuration(dog.seconds) : "–";
+      row.insertCell().textContent = hasWalks ? (dog.meters / 1609.344).toFixed(2) : "–";
+      row.insertCell().textContent = dog.walks;
+    }
+
+    // Total row, only useful with more than one dog
+    if (stats.length > 1) {
+      const totalSeconds = stats.reduce((sum, d) => sum + d.seconds, 0);
+      const totalMeters = stats.reduce((sum, d) => sum + d.meters, 0);
+      const totalWalks = stats.reduce((sum, d) => sum + d.walks, 0);
+
+      const footRow = table.createTFoot().insertRow();
+      footRow.insertCell().textContent = "Total";
+      footRow.insertCell().textContent = totalWalks ? formatDuration(totalSeconds) : "–";
+      footRow.insertCell().textContent = totalWalks ? (totalMeters / 1609.344).toFixed(2) : "–";
+      footRow.insertCell().textContent = totalWalks;
+    }
+
+    listEl.appendChild(table);
+  } catch (err) {
+    listEl.textContent = "Could not load stats.";
+  }
+}
+// Shows dog parks near the saved ZIP code in the right sidebar
+async function loadCommunities() {
+  const listEl = document.getElementById("communities-list");
+  const subEl = document.getElementById("communities-sub");
+
+  try {
+    const response = await fetch("/api/communities");
+    const data = await response.json();
+
+    if (!response.ok) {
+      listEl.textContent = data.error;
+      return;
+    }
+
+    subEl.textContent = "Dog parks near " + data.city;
+    listEl.innerHTML = "";
+
+    if (data.places.length === 0) {
+      listEl.textContent = "No dog parks found nearby.";
+      return;
+    }
+
+    for (const place of data.places) {
+      const item = document.createElement("div");
+      item.className = "place";
+
+      const link = document.createElement("a");
+      link.href = place.mapUrl;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = place.name;
+
+      const distance = document.createElement("div");
+      distance.className = "place-distance";
+      distance.textContent = formatMiles(place.meters) + " away";
+
+      item.appendChild(link);
+      item.appendChild(distance);
+      listEl.appendChild(item);
+    }
+  } catch (err) {
+    listEl.textContent = "Places unavailable right now.";
+  }
+}
 
     // Load the names first, then the weather and stats
     async function start() {
+      loadCommunities();
       const names = await loadNames();
       await loadWeather(names);
       await loadStats();

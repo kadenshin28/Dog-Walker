@@ -42,6 +42,17 @@ function readWalks() {
 function saveWalks(walks) {
   fs.writeFileSync(walksFile, JSON.stringify(walks, null, 2));
 }
+// Distance between two GPS points in meters 
+function distanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
 // multer: save uploaded pictures to /uploads with a unique name
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
@@ -267,6 +278,88 @@ app.get("/api/stats", (req, res) => {
   });
 
   res.json(stats);
+});
+// API: dog parks near the saved ZIP code (data from OpenStreetMap, no key needed)
+app.get("/api/communities", async (req, res) => {
+  const { zip } = readLocation();
+  if (!zip) {
+    return res.status(400).json({ error: "Save a ZIP code to see places nearby." });
+  }
+
+  try {
+    // 1. ZIP code -> city + coordinates
+    const zipResponse = await fetch(`https://api.zippopotam.us/us/${zip}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!zipResponse.ok) {
+      return res.status(404).json({ error: "ZIP code not found." });
+    }
+    const place = (await zipResponse.json()).places[0];
+    const lat = Number(place.latitude);
+    const lon = Number(place.longitude);
+
+    // 2. Ask OpenStreetMap for dog parks within 10 km (about 6 miles)
+    const query =
+      "[out:json][timeout:15];(" +
+      `node["leisure"="dog_park"](around:10000,${lat},${lon});` +
+      `way["leisure"="dog_park"](around:10000,${lat},${lon});` +
+      ");out center 40;";
+
+    // Try the main server first, then a backup, and say why each one fails
+    const servers = [
+      "https://overpass-api.de/api/interpreter",
+      "https://overpass.kumi.systems/api/interpreter",
+    ];
+
+    let data = null;
+    for (const url of servers) {
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "User-Agent": "DogWalkerApp/1.0 (student project)",
+          },
+          body: "data=" + encodeURIComponent(query),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (response.ok) {
+          data = await response.json();
+          break;
+        }
+        console.error("Places server", url, "answered with status", response.status);
+      } catch (err) {
+        console.error("Places server", url, "failed:", (err.cause && err.cause.code) || err.message);
+      }
+    }
+
+    if (!data) {
+      throw new Error("No places server answered");
+    }
+
+    // 3. Clean up: add distance, sort nearest first, keep 8
+    const places = data.elements
+      .map((el) => {
+        const pLat = el.lat ?? (el.center && el.center.lat);
+        const pLon = el.lon ?? (el.center && el.center.lon);
+        if (pLat === undefined || pLon === undefined) return null;
+
+        return {
+          name: (el.tags && el.tags.name) || "Dog park",
+          meters: Math.round(distanceMeters(lat, lon, pLat, pLon)),
+          mapUrl: `https://www.google.com/maps/search/?api=1&query=${pLat},${pLon}`,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.meters - b.meters)
+      .slice(0, 8);
+
+    res.json({ city: place["place name"], places });
+  } catch (err) {
+    console.error("Communities error:", err);
+    res.status(502).json({ error: "Could not load places nearby." });
+  }
 });
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
