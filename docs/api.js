@@ -340,104 +340,46 @@
   }
 
   // ---------- Get nearby communities ----------
-  async function communities() {
-    const zip = load("location", {}).zip;
+  
+async function communities() {
+  const zip = load("location", {}).zip;
 
-    if (!zip) {
-      return reply(
-        { error: "Save a ZIP code to see communities near you." },
-        400
-      );
-    }
-
-    const here = await zipInfo(zip);
-
-    // 1. Try live OpenStreetMap dog park results.
-    if (here) {
-      const live = await osmDogParks(zip, here);
-
-      if (live && live.length > 0) {
-        return reply({
-          zip,
-          source: "osm",
-          places: live,
-        });
-      }
-    }
-
-    // 2. Fall back to your own communities.json file.
-    let list = [];
-
-    try {
-      const response = await realFetch("communities.json");
-
-      if (response.ok) {
-        list = await response.json();
-      }
-    } catch (err) {
-      console.warn("Could not load communities.json:", err);
-    }
-
-    const places = list
-      .map((c) => {
-        let meters = null;
-
-        if (
-          here &&
-          typeof c.lat === "number" &&
-          typeof c.lon === "number"
-        ) {
-          meters = Math.round(
-            distanceMeters(
-              here.lat,
-              here.lon,
-              c.lat,
-              c.lon
-            )
-          );
-        }
-
-        return { c, meters };
-      })
-      .filter(({ c, meters }) => {
-        if (meters !== null) {
-          return meters <= MAX_METERS;
-        }
-
-        return zip.startsWith(
-          String(c.zipPrefix || "")
-        );
-      })
-      .sort((a, b) => {
-        if (a.meters !== null && b.meters !== null) {
-          return a.meters - b.meters;
-        }
-
-        if (a.meters !== null) return -1;
-        if (b.meters !== null) return 1;
-
-        return (
-          String(b.c.zipPrefix || "").length -
-          String(a.c.zipPrefix || "").length
-        );
-      })
-      .slice(0, 8)
-      .map(({ c, meters }) => ({
-        name: String(c.name || "Unnamed"),
-        type: String(c.type || ""),
-        description: String(c.description || ""),
-        link: /^https?:\/\//i.test(c.link || "")
-          ? c.link
-          : "",
-        meters,
-      }));
-
-    return reply({
-      zip,
-      source: "file",
-      places,
-    });
+  if (!zip) {
+    return reply(
+      { error: "Save a ZIP code to see dog parks near you." },
+      400
+    );
   }
+
+  const here = await zipInfo(zip);
+
+  if (!here) {
+    return reply(
+      { error: "Could not find that ZIP code." },
+      404
+    );
+  }
+
+  const live = await osmDogParks(zip, here);
+
+  if (live === null) {
+    return reply(
+      {
+        zip,
+        source: "osm",
+        places: [],
+        error: "Could not connect to the dog park service. Please try again."
+      },
+      502
+    );
+  }
+
+  return reply({
+    zip,
+    source: "osm",
+    places: live
+  });
+}
 
   // ---------- Request handler ----------
   async function handle(method, path, body) {
