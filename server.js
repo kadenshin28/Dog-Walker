@@ -64,7 +64,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+  limits: { fileSize: 15 * 1024 * 1024 }, // 5 MB max
   fileFilter: (req, file, cb) => {
     cb(null, file.mimetype.startsWith("image/")); // images only
   },
@@ -280,86 +280,165 @@ app.get("/api/stats", (req, res) => {
   res.json(stats);
 });
 // API: dog parks near the saved ZIP code (data from OpenStreetMap, no key needed)
+// ---------- Communities (read from communities.json) ----------
+// ---------- Communities ----------
+const communitiesFile = path.join(__dirname, "communities.json");
+const MAX_MILES = 25;
+
+// Safe read of your own list (used if the live lookup fails)
+function readCommunities() {
+  try {
+    const text = fs.readFileSync(communitiesFile, "utf8").trim();
+    return text ? JSON.parse(text) : [];
+  } catch (err) {
+    console.error("Could not read communities.json:", err.message);
+    return [];
+  }
+}
+
+// ZIP code -> coordinates, remembered so we only look each ZIP up once
+const zipCoordsCache = new Map();
+
+async function getZipCoords(zip) {
+  if (zipCoordsCache.has(zip)) return zipCoordsCache.get(zip);
+
+  try {
+    const response = await fetch(`https://api.zippopotam.us/us/${zip}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return null;
+
+    const place = (await response.json()).places[0];
+    const coords = { lat: Number(place.latitude), lon: Number(place.longitude) };
+    zipCoordsCache.set(zip, coords);
+    return coords;
+  } catch (err) {
+    console.error("ZIP lookup failed:", (err.cause && err.cause.code) || err.message);
+    return null;
+  }
+}
+
+// Dog parks from OpenStreetMap (free, no key). Results are remembered for 6 hours.
+const osmCache = new Map();
+const OSM_CACHE_MS = 6 * 60 * 60 * 1000;
+
+async function findOsmDogParks(zip, lat, lon) {
+  const cached = osmCache.get(zip);
+  if (cached && Date.now() - cached.time < OSM_CACHE_MS) return cached.places;
+
+  // Dog parks within 10 km (about 6 miles)
+  const query =
+    "[out:json][timeout:25];(" +
+    `node["leisure"="dog_park"](around:10000,${lat},${lon});` +
+    `way["leisure"="dog_park"](around:10000,${lat},${lon});` +
+    ");out center 40;";
+
+  // Try the main server first, then a backup
+  const servers = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+  ];
+
+  let data = null;
+  for (const url of servers) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "application/json",
+          "User-Agent": "DogWalkerApp/1.0 (student project)",
+        },
+        body: "data=" + encodeURIComponent(query),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (response.ok) {
+        data = await response.json();
+        break;
+      }
+      console.error("Places server", url, "answered with status", response.status);
+    } catch (err) {
+      console.error("Places server", url, "failed:", (err.cause && err.cause.code) || err.message);
+    }
+  }
+
+  if (!data) return null;
+
+  const places = data.elements
+    .map((el) => {
+      const pLat = el.lat ?? (el.center && el.center.lat);
+      const pLon = el.lon ?? (el.center && el.center.lon);
+      if (pLat === undefined || pLon === undefined) return null;
+
+      return {
+        name: (el.tags && el.tags.name) || "Dog park",
+        type: "Dog park",
+        description: "",
+        link: `https://www.google.com/maps/search/?api=1&query=${pLat},${pLon}`,
+        meters: Math.round(distanceMeters(lat, lon, pLat, pLon)),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.meters - b.meters)
+    .slice(0, 8);
+
+  osmCache.set(zip, { time: Date.now(), places });
+  return places;
+}
+
+// Your own list: add distances, filter, sort, keep 8
+function listFromFile(zip, here) {
+  return readCommunities()
+    .map((c) => {
+      let meters = null;
+      if (here && typeof c.lat === "number" && typeof c.lon === "number") {
+        meters = Math.round(distanceMeters(here.lat, here.lon, c.lat, c.lon));
+      }
+      return { c, meters };
+    })
+    .filter(({ c, meters }) => {
+      if (meters !== null) return meters <= MAX_MILES * 1609.344;
+      return zip.startsWith(String(c.zipPrefix || ""));
+    })
+    .sort((a, b) => {
+      if (a.meters !== null && b.meters !== null) return a.meters - b.meters;
+      if (a.meters !== null) return -1;
+      if (b.meters !== null) return 1;
+      return String(b.c.zipPrefix || "").length - String(a.c.zipPrefix || "").length;
+    })
+    .slice(0, 8)
+    .map(({ c, meters }) => ({
+      name: String(c.name || "Unnamed"),
+      type: String(c.type || ""),
+      description: String(c.description || ""),
+      link: /^https?:\/\//i.test(c.link || "") ? c.link : "",
+      meters,
+    }));
+}
+
+// API: communities near the saved ZIP code
 app.get("/api/communities", async (req, res) => {
   const { zip } = readLocation();
   if (!zip) {
-    return res.status(400).json({ error: "Save a ZIP code to see places nearby." });
+    return res.status(400).json({ error: "Save a ZIP code to see communities near you." });
   }
 
-  try {
-    // 1. ZIP code -> city + coordinates
-    const zipResponse = await fetch(`https://api.zippopotam.us/us/${zip}`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!zipResponse.ok) {
-      return res.status(404).json({ error: "ZIP code not found." });
-    }
-    const place = (await zipResponse.json()).places[0];
-    const lat = Number(place.latitude);
-    const lon = Number(place.longitude);
+  const here = await getZipCoords(zip); // null if the lookup fails
 
-    // 2. Ask OpenStreetMap for dog parks within 10 km (about 6 miles)
-    const query =
-      "[out:json][timeout:15];(" +
-      `node["leisure"="dog_park"](around:10000,${lat},${lon});` +
-      `way["leisure"="dog_park"](around:10000,${lat},${lon});` +
-      ");out center 40;";
-
-    // Try the main server first, then a backup, and say why each one fails
-    const servers = [
-      "https://overpass-api.de/api/interpreter",
-      "https://overpass.kumi.systems/api/interpreter",
-    ];
-
-    let data = null;
-    for (const url of servers) {
-      try {
-        const response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-            "User-Agent": "DogWalkerApp/1.0 (student project)",
-          },
-          body: "data=" + encodeURIComponent(query),
-          signal: AbortSignal.timeout(8000),
-        });
-        if (response.ok) {
-          data = await response.json();
-          break;
-        }
-        console.error("Places server", url, "answered with status", response.status);
-      } catch (err) {
-        console.error("Places server", url, "failed:", (err.cause && err.cause.code) || err.message);
+  // 1. Live dog parks from OpenStreetMap
+  if (here) {
+    try {
+      const live = await findOsmDogParks(zip, here.lat, here.lon);
+      if (live && live.length > 0) {
+        return res.json({ zip, source: "osm", places: live });
       }
+    } catch (err) {
+      console.error("Live parks failed:", err.message);
     }
-
-    if (!data) {
-      throw new Error("No places server answered");
-    }
-
-    // 3. Clean up: add distance, sort nearest first, keep 8
-    const places = data.elements
-      .map((el) => {
-        const pLat = el.lat ?? (el.center && el.center.lat);
-        const pLon = el.lon ?? (el.center && el.center.lon);
-        if (pLat === undefined || pLon === undefined) return null;
-
-        return {
-          name: (el.tags && el.tags.name) || "Dog park",
-          meters: Math.round(distanceMeters(lat, lon, pLat, pLon)),
-          mapUrl: `https://www.google.com/maps/search/?api=1&query=${pLat},${pLon}`,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.meters - b.meters)
-      .slice(0, 8);
-
-    res.json({ city: place["place name"], places });
-  } catch (err) {
-    console.error("Communities error:", err);
-    res.status(502).json({ error: "Could not load places nearby." });
   }
+
+  // 2. Otherwise, your own list
+  res.json({ zip, source: "file", places: listFromFile(zip, here) });
 });
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);

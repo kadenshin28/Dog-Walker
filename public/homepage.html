@@ -15,12 +15,15 @@
       <div id="dog-profiles"></div>
     </aside>
 
-       <!-- Right sidebar: communities nearby -->
+      <!-- Right sidebar: communities nearby -->
     <aside id="communities">
       <h2>🏞️ Doggy Network</h2>
       <p id="communities-sub" class="place-distance"></p>
       <div id="communities-list">Looking nearby...</div>
-      <p class="attribution">Map data © OpenStreetMap contributors</p>
+
+      <!-- Opens Google Maps with a dog park search for your ZIP -->
+      <a id="maps-link" class="next-button" target="_blank" rel="noopener"
+         href="https://www.google.com/maps/search/dog+parks+near+me">🗺️ Find dog parks in Google Maps</a>
     </aside>
     <!-- Main content, centered on the page -->
     <main>
@@ -97,9 +100,9 @@
 
     // Extra sentence part about daylight (empty during the day)
     function describeDaylight(daylight) {
-      if (daylight === "getting_dark") return "it's getting dark, bring a flashlight";
-      if (daylight === "dark") return "it's dark, if you walk, bring a flashlight";
-      if (daylight === "getting_bright") return "it's getting bright, wait a little bit";
+      if (daylight === "getting_dark") return "It's getting dark, bring a flashlight";
+      if (daylight === "dark") return "It's dark, if you walk, bring a flashlight";
+      if (daylight === "getting_bright") return "It's getting bright, wait a little bit";
       return "";
     }
 
@@ -187,11 +190,11 @@
 
         let sentence =
           "It is " + data.temperature + " degrees with " +
-          describeWeather(data.code);
+          describeWeather(data.code) ;
 
         const daylightText = describeDaylight(data.daylight);
         if (daylightText) {
-          sentence += ", " + daylightText;
+          sentence += ". " + daylightText;
         }
         weatherEl.textContent = sentence + ".";
 
@@ -265,6 +268,7 @@ async function loadStats() {
   }
 }
 // Shows dog parks near the saved ZIP code in the right sidebar
+// Shows the matching communities in the right sidebar
 async function loadCommunities() {
   const listEl = document.getElementById("communities-list");
   const subEl = document.getElementById("communities-sub");
@@ -278,35 +282,67 @@ async function loadCommunities() {
       return;
     }
 
-    subEl.textContent = "Dog parks near " + data.city;
+    // Point the Google Maps button at your ZIP code
+    document.getElementById("maps-link").href =
+      "https://www.google.com/maps/search/?api=1&query=" +
+      encodeURIComponent("dog parks near " + data.zip);
+
+  subEl.textContent =
+  data.source === "osm"
+    ? "Dog parks near you, from OpenStreetMap"
+    : "Dog-friendly places and groups near you";
     listEl.innerHTML = "";
 
     if (data.places.length === 0) {
-      listEl.textContent = "No dog parks found nearby.";
+      listEl.textContent = "Nothing listed for your area yet.";
       return;
     }
 
-    for (const place of data.places) {
+       for (const place of data.places) {
       const item = document.createElement("div");
       item.className = "place";
 
-      const link = document.createElement("a");
-      link.href = place.mapUrl;
-      link.target = "_blank";
-      link.rel = "noopener";
-      link.textContent = place.name;
+      // The name is a link if the entry has one
+      let nameEl;
+      if (place.link) {
+        nameEl = document.createElement("a");
+        nameEl.href = place.link;
+        nameEl.target = "_blank";
+        nameEl.rel = "noopener";
+      } else {
+        nameEl = document.createElement("strong");
+      }
+      nameEl.textContent = place.name;
+      item.appendChild(nameEl);
 
-      const distance = document.createElement("div");
-      distance.className = "place-distance";
-      distance.textContent = formatMiles(place.meters) + " away";
+      if (place.type) {
+        const typeEl = document.createElement("span");
+        typeEl.className = "place-type";
+        typeEl.textContent = place.type;
+        item.appendChild(typeEl);
+      }
 
-      item.appendChild(link);
-      item.appendChild(distance);
+      // Miles away (only for entries that have coordinates)
+      if (place.meters !== null) {
+        const milesEl = document.createElement("div");
+        milesEl.className = "place-distance";
+        milesEl.textContent = "📍 " + formatMiles(place.meters) + " away";
+        item.appendChild(milesEl);
+      }
+
+      if (place.description) {
+        const descEl = document.createElement("div");
+        descEl.className = "place-distance";
+        descEl.textContent = place.description;
+        item.appendChild(descEl);
+      }
+
       listEl.appendChild(item);
     }
   } catch (err) {
-    listEl.textContent = "Places unavailable right now.";
+    listEl.textContent = "Communities unavailable right now.";
   }
+  
 }
 
     // Load the names first, then the weather and stats
