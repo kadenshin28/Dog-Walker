@@ -271,80 +271,73 @@ async function loadStats() {
 }
 // Shows dog parks near the saved ZIP code in the right sidebar
 // Shows the matching communities in the right sidebar
+
 async function loadCommunities() {
   const listEl = document.getElementById("communities-list");
   const subEl = document.getElementById("communities-sub");
 
   try {
+    listEl.textContent = "Finding real dog parks nearby...";
+
     const response = await fetch("/api/communities");
     const data = await response.json();
 
     if (!response.ok) {
-      listEl.textContent = data.error;
+      listEl.textContent = data.error || "Dog parks unavailable.";
       return;
     }
 
-    // Point the Google Maps button at your ZIP code
+    // ONLY allow real OpenStreetMap results.
+    // Reject communities.json and all sample data.
+    if (data.source !== "osm") {
+      listEl.textContent = "Live dog park information is unavailable.";
+      subEl.textContent = "";
+      return;
+    }
+
     document.getElementById("maps-link").href =
       "https://www.google.com/maps/search/?api=1&query=" +
       encodeURIComponent("dog parks near " + data.zip);
 
-  subEl.textContent =
-  data.source === "osm"
-    ? "Dog parks near you, from OpenStreetMap"
-    : "Dog-friendly places and groups near you";
+    subEl.textContent = "Real dog parks from OpenStreetMap";
     listEl.innerHTML = "";
 
-    if (data.places.length === 0) {
-      listEl.textContent = "Nothing listed for your area yet.";
+    if (!Array.isArray(data.places) || data.places.length === 0) {
+      listEl.textContent = "No dog parks found near your ZIP code.";
       return;
     }
 
-       for (const place of data.places) {
+    for (const place of data.places) {
       const item = document.createElement("div");
       item.className = "place";
 
-      // The name is a link if the entry has one
-      let nameEl;
-      if (place.link) {
-        nameEl = document.createElement("a");
-        nameEl.href = place.link;
-        nameEl.target = "_blank";
-        nameEl.rel = "noopener";
-      } else {
-        nameEl = document.createElement("strong");
-      }
+      const nameEl = document.createElement("a");
+      nameEl.href = place.link;
+      nameEl.target = "_blank";
+      nameEl.rel = "noopener";
       nameEl.textContent = place.name;
+
       item.appendChild(nameEl);
 
-      if (place.type) {
-        const typeEl = document.createElement("span");
-        typeEl.className = "place-type";
-        typeEl.textContent = place.type;
-        item.appendChild(typeEl);
-      }
+      const typeEl = document.createElement("span");
+      typeEl.className = "place-type";
+      typeEl.textContent = "Dog park";
+      item.appendChild(typeEl);
 
-      // Miles away (only for entries that have coordinates)
-      if (place.meters !== null) {
+      if (typeof place.meters === "number") {
         const milesEl = document.createElement("div");
         milesEl.className = "place-distance";
-        milesEl.textContent = "📍 " + formatMiles(place.meters) + " away";
+        milesEl.textContent =
+          "📍 " + formatMiles(place.meters) + " away";
         item.appendChild(milesEl);
-      }
-
-      if (place.description) {
-        const descEl = document.createElement("div");
-        descEl.className = "place-distance";
-        descEl.textContent = place.description;
-        item.appendChild(descEl);
       }
 
       listEl.appendChild(item);
     }
   } catch (err) {
-    listEl.textContent = "Communities unavailable right now.";
+    console.error("Dog park loading error:", err);
+    listEl.textContent = "Could not load live dog parks.";
   }
-  
 }
 
     // Load the names first, then the weather and stats
