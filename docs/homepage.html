@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -17,17 +18,19 @@
       <a href="setup.html" class="next-button">➕ Add a dog</a>
     </aside>
 
-      <!-- Right sidebar: communities nearby -->
+    <!-- Right sidebar: real dog parks nearby -->
     <aside id="communities">
       <h2>🏞️ Doggy Network</h2>
       <p id="communities-sub" class="place-distance"></p>
       <div id="communities-list">Looking nearby...</div>
 
-      <!-- Opens Google Maps with a dog park search for your ZIP -->
       <a id="maps-link" class="next-button" target="_blank" rel="noopener"
-         href="https://www.google.com/maps/search/dog+parks+near+me">🗺️ Find dog parks in Google Maps</a>
+         href="https://www.google.com/maps/search/dog+parks+near+me">
+        🗺️ Find dog parks in Google Maps
+      </a>
     </aside>
-    <!-- Main content, centered on the page -->
+
+    <!-- Main content -->
     <main>
       <h1>Welcome back, <span id="dog-names">friend</span>! 🐕</h1>
 
@@ -45,6 +48,7 @@
   </div>
 
   <script>
+
     // Turns ["Buddy", "Luna", "Max"] into "Buddy, Luna, and Max"
     function joinNames(names) {
       let result = "";
@@ -56,9 +60,8 @@
         const isSecondToLast = i === names.length - 2;
 
         if (isLast) {
-          // nothing after the last name
+          // Nothing after the last name
         } else if (isSecondToLast) {
-          // 2 names: "A and B", 3+ names: "A, B, and C"
           result += names.length === 2 ? " and " : ", and ";
         } else {
           result += ", ";
@@ -68,22 +71,23 @@
       return result;
     }
 
-    // 3725 seconds -> "1h 2m", 725 -> "12m 5s", 45 -> "45s"
+    // Converts seconds into a readable duration
     function formatDuration(totalSeconds) {
       const h = Math.floor(totalSeconds / 3600);
       const m = Math.floor((totalSeconds % 3600) / 60);
       const s = totalSeconds % 60;
+
       if (h > 0) return h + "h " + m + "m";
       if (m > 0) return m + "m " + s + "s";
       return s + "s";
     }
 
-    // 1609 meters -> "1.00 mi"
+    // Converts meters into miles
     function formatMiles(meters) {
       return (meters / 1609.344).toFixed(2) + " mi";
     }
 
-    // Turns Open-Meteo's weather code into words that fit "with ___"
+    // Describes current weather using Open-Meteo weather codes
     function describeWeather(code) {
       if (code === 0) return "clear skies";
       if (code === 1) return "mostly clear skies";
@@ -97,18 +101,37 @@
       if (code >= 80 && code <= 82) return "rain showers";
       if (code === 85 || code === 86) return "snow showers";
       if (code >= 95) return "thunderstorms";
+
       return "unknown conditions";
     }
 
-    // Extra sentence part about daylight (empty during the day)
+    // Checks if the weather code indicates rain
+    function isRain(code) {
+      return (
+        (code >= 51 && code <= 67) ||
+        (code >= 80 && code <= 82) ||
+        code >= 95
+      );
+    }
+
+    // Daylight reminder
     function describeDaylight(daylight) {
-      if (daylight === "getting_dark") return "It's getting dark, bring a flashlight";
-      if (daylight === "dark") return "It's dark, if you walk, bring a flashlight";
-      if (daylight === "getting_bright") return "It's getting bright, wait a little bit";
+      if (daylight === "getting_dark") {
+        return "It's getting dark, bring a flashlight";
+      }
+
+      if (daylight === "dark") {
+        return "It's dark, if you walk, bring a flashlight";
+      }
+
+      if (daylight === "getting_bright") {
+        return "It's getting bright, wait a little bit";
+      }
+
       return "";
     }
 
-    // Tip about what the dogs need, based on the temperature
+    // Temperature recommendations
     function describeTemp(temperature, names) {
       if (names.length === 0) {
         if (temperature < 50) return "Bring a sweater.";
@@ -118,11 +141,24 @@
 
       const namesText = joinNames(names);
       const verb = names.length === 1 ? "needs" : "need";
-      if (temperature < 25) return "Keep " + namesText + "inside, it is way too cold.";
-      if (temperature < 50) return namesText + " " + verb + " a sweater.";
-      if (temperature > 85) return "Keep " + namesText + "inside, it is way too hot.";
-      if (temperature > 75) return namesText + " " + verb + " water.";
-      return ""; // 50 to 75 degrees: no tip
+
+      if (temperature < 25) {
+        return "Keep " + namesText + " inside, it is way too cold.";
+      }
+
+      if (temperature < 50) {
+        return namesText + " " + verb + " a sweater.";
+      }
+
+      if (temperature > 85) {
+        return "Keep " + namesText + " inside, it is way too hot.";
+      }
+
+      if (temperature > 75) {
+        return namesText + " " + verb + " water.";
+      }
+
+      return "";
     }
 
     // Builds the sidebar: one clickable card per dog
@@ -155,7 +191,7 @@
       }
     }
 
-    // Shows the dog names + sidebar, and returns the names as a list
+    // Loads dog names and profiles
     async function loadNames() {
       try {
         const response = await fetch("/api/dogs");
@@ -169,14 +205,17 @@
 
           document.getElementById("dog-names").textContent = text;
           document.title = "Welcome Back " + text;
+
           return names;
         }
       } catch (err) {
-        // If it fails, the page keeps the default "friend"
+        console.error("Dog loading error:", err);
       }
+
       return [];
     }
 
+    // Loads weather and creates personalized walking reminders
     async function loadWeather(names) {
       const weatherEl = document.getElementById("weather");
       const tipEl = document.getElementById("tip");
@@ -192,163 +231,215 @@
 
         let sentence =
           "It is " + data.temperature + " degrees with " +
-          describeWeather(data.code) ;
+          describeWeather(data.code);
 
         const daylightText = describeDaylight(data.daylight);
+
         if (daylightText) {
           sentence += ". " + daylightText;
         }
+
         weatherEl.textContent = sentence + ".";
 
-        tipEl.textContent = describeTemp(data.temperature, names);
+        // Build all walking recommendations
+        const tips = [];
+
+        // Temperature recommendation
+        const temperatureTip = describeTemp(data.temperature, names);
+
+        if (temperatureTip) {
+          tips.push(temperatureTip);
+        }
+
+        // Rain recommendation
+        if (isRain(data.code)) {
+          if (data.code >= 95) {
+            tips.push("⛈️ Bring an umbrella and be careful walking!");
+          } else {
+            tips.push("☔ Bring an umbrella!");
+          }
+        }
+
+        // Show recommendations
+        tipEl.textContent = tips.join(" ");
+
       } catch (err) {
+        console.error("Weather loading error:", err);
         weatherEl.textContent = "Weather unavailable right now.";
       }
     }
 
-    // Shows each dog's total time and miles walked
-    // Shows each dog's total time and miles walked, as a table
-async function loadStats() {
-  const listEl = document.getElementById("stats-list");
+    // Loads each dog's total time and miles walked
+    async function loadStats() {
+      const listEl = document.getElementById("stats-list");
 
-  try {
-    const response = await fetch("/api/stats");
-    const stats = await response.json();
+      try {
+        const response = await fetch("/api/stats");
+        const stats = await response.json();
 
-    listEl.innerHTML = "";
+        listEl.innerHTML = "";
 
-    if (stats.length === 0) {
-      listEl.textContent = "Add a dog to see walk stats.";
-      return;
-    }
+        if (stats.length === 0) {
+          listEl.textContent = "Add a dog to see walk stats.";
+          return;
+        }
 
-    const table = document.createElement("table");
-    table.className = "stats-table";
+        const table = document.createElement("table");
+        table.className = "stats-table";
 
-    // Header row
-    const headRow = table.createTHead().insertRow();
-    for (const label of ["Dog", "Time", "Miles", "Walks"]) {
-      const th = document.createElement("th");
-      th.textContent = label;
-      headRow.appendChild(th);
-    }
+        // Header row
+        const headRow = table.createTHead().insertRow();
 
-    // One row per dog
-    const body = table.createTBody();
-    for (const dog of stats) {
-      const row = body.insertRow();
+        for (const label of ["Dog", "Time", "Miles", "Walks"]) {
+          const th = document.createElement("th");
+          th.textContent = label;
+          headRow.appendChild(th);
+        }
 
-      // The name links to that dog's profile
-      const nameCell = row.insertCell();
-      const link = document.createElement("a");
-      link.href = "profile.html?id=" + encodeURIComponent(dog.dogId);
-      link.textContent = dog.name;
-      nameCell.appendChild(link);
+        // One row per dog
+        const body = table.createTBody();
 
-      const hasWalks = dog.walks > 0;
-      row.insertCell().textContent = hasWalks ? formatDuration(dog.seconds) : "–";
-      row.insertCell().textContent = hasWalks ? (dog.meters / 1609.344).toFixed(2) : "–";
-      row.insertCell().textContent = dog.walks;
-    }
+        for (const dog of stats) {
+          const row = body.insertRow();
 
-    // Total row, only useful with more than one dog
-    if (stats.length > 1) {
-      const totalSeconds = stats.reduce((sum, d) => sum + d.seconds, 0);
-      const totalMeters = stats.reduce((sum, d) => sum + d.meters, 0);
-      const totalWalks = stats.reduce((sum, d) => sum + d.walks, 0);
+          const nameCell = row.insertCell();
+          const link = document.createElement("a");
 
-      const footRow = table.createTFoot().insertRow();
-      footRow.insertCell().textContent = "Total";
-      footRow.insertCell().textContent = totalWalks ? formatDuration(totalSeconds) : "–";
-      footRow.insertCell().textContent = totalWalks ? (totalMeters / 1609.344).toFixed(2) : "–";
-      footRow.insertCell().textContent = totalWalks;
-    }
+          link.href = "profile.html?id=" + encodeURIComponent(dog.dogId);
+          link.textContent = dog.name;
 
-    listEl.appendChild(table);
-  } catch (err) {
-    listEl.textContent = "Could not load stats.";
-  }
-}
-// Shows dog parks near the saved ZIP code in the right sidebar
-// Shows the matching communities in the right sidebar
+          nameCell.appendChild(link);
 
-async function loadCommunities() {
-  const listEl = document.getElementById("communities-list");
-  const subEl = document.getElementById("communities-sub");
+          const hasWalks = dog.walks > 0;
 
-  try {
-    listEl.textContent = "Finding real dog parks nearby...";
+          row.insertCell().textContent =
+            hasWalks ? formatDuration(dog.seconds) : "–";
 
-    const response = await fetch("/api/communities");
-    const data = await response.json();
+          row.insertCell().textContent =
+            hasWalks ? (dog.meters / 1609.344).toFixed(2) : "–";
 
-    if (!response.ok) {
-      listEl.textContent = data.error || "Dog parks unavailable.";
-      return;
-    }
+          row.insertCell().textContent = dog.walks;
+        }
 
-    // ONLY allow real OpenStreetMap results.
-    // Reject communities.json and all sample data.
-    if (data.source !== "osm") {
-      listEl.textContent = "Live dog park information is unavailable.";
-      subEl.textContent = "";
-      return;
-    }
+        // Total row
+        if (stats.length > 1) {
+          const totalSeconds = stats.reduce(
+            (sum, d) => sum + d.seconds, 0
+          );
 
-    document.getElementById("maps-link").href =
-      "https://www.google.com/maps/search/?api=1&query=" +
-      encodeURIComponent("dog parks near " + data.zip);
+          const totalMeters = stats.reduce(
+            (sum, d) => sum + d.meters, 0
+          );
 
-    subEl.textContent = "Real dog parks from OpenStreetMap";
-    listEl.innerHTML = "";
+          const totalWalks = stats.reduce(
+            (sum, d) => sum + d.walks, 0
+          );
 
-    if (!Array.isArray(data.places) || data.places.length === 0) {
-      listEl.textContent = "No dog parks found near your ZIP code.";
-      return;
-    }
+          const footRow = table.createTFoot().insertRow();
 
-    for (const place of data.places) {
-      const item = document.createElement("div");
-      item.className = "place";
+          footRow.insertCell().textContent = "Total";
 
-      const nameEl = document.createElement("a");
-      nameEl.href = place.link;
-      nameEl.target = "_blank";
-      nameEl.rel = "noopener";
-      nameEl.textContent = place.name;
+          footRow.insertCell().textContent =
+            totalWalks ? formatDuration(totalSeconds) : "–";
 
-      item.appendChild(nameEl);
+          footRow.insertCell().textContent =
+            totalWalks ? (totalMeters / 1609.344).toFixed(2) : "–";
 
-      const typeEl = document.createElement("span");
-      typeEl.className = "place-type";
-      typeEl.textContent = "Dog park";
-      item.appendChild(typeEl);
+          footRow.insertCell().textContent = totalWalks;
+        }
 
-      if (typeof place.meters === "number") {
-        const milesEl = document.createElement("div");
-        milesEl.className = "place-distance";
-        milesEl.textContent =
-          "📍 " + formatMiles(place.meters) + " away";
-        item.appendChild(milesEl);
+        listEl.appendChild(table);
+
+      } catch (err) {
+        console.error("Stats loading error:", err);
+        listEl.textContent = "Could not load stats.";
       }
-
-      listEl.appendChild(item);
     }
-  } catch (err) {
-    console.error("Dog park loading error:", err);
-    listEl.textContent = "Could not load live dog parks.";
-  }
-}
 
-    // Load the names first, then the weather and stats
+    // Loads ONLY real dog parks from OpenStreetMap
+    async function loadCommunities() {
+      const listEl = document.getElementById("communities-list");
+      const subEl = document.getElementById("communities-sub");
+
+      try {
+        listEl.textContent = "Finding real dog parks nearby...";
+
+        const response = await fetch("/api/communities");
+        const data = await response.json();
+
+        if (!response.ok) {
+          listEl.textContent = data.error || "Dog parks unavailable.";
+          return;
+        }
+
+        // Reject sample and fallback data
+        if (data.source !== "osm") {
+          listEl.textContent = "Live dog park information is unavailable.";
+          subEl.textContent = "";
+          return;
+        }
+
+        document.getElementById("maps-link").href =
+          "https://www.google.com/maps/search/?api=1&query=" +
+          encodeURIComponent("dog parks near " + data.zip);
+
+        subEl.textContent = "Real dog parks from OpenStreetMap";
+        listEl.innerHTML = "";
+
+        if (!Array.isArray(data.places) || data.places.length === 0) {
+          listEl.textContent = "No dog parks found near your ZIP code.";
+          return;
+        }
+
+        for (const place of data.places) {
+          const item = document.createElement("div");
+          item.className = "place";
+
+          const nameEl = document.createElement("a");
+          nameEl.href = place.link;
+          nameEl.target = "_blank";
+          nameEl.rel = "noopener";
+          nameEl.textContent = place.name;
+
+          item.appendChild(nameEl);
+
+          const typeEl = document.createElement("span");
+          typeEl.className = "place-type";
+          typeEl.textContent = "Dog park";
+
+          item.appendChild(typeEl);
+
+          if (typeof place.meters === "number") {
+            const milesEl = document.createElement("div");
+            milesEl.className = "place-distance";
+
+            milesEl.textContent =
+              "📍 " + formatMiles(place.meters) + " away";
+
+            item.appendChild(milesEl);
+          }
+
+          listEl.appendChild(item);
+        }
+
+      } catch (err) {
+        console.error("Dog park loading error:", err);
+        listEl.textContent = "Could not load live dog parks.";
+      }
+    }
+
+    // Starts the page
     async function start() {
       loadCommunities();
+
       const names = await loadNames();
+
       await loadWeather(names);
       await loadStats();
     }
 
     start();
+
   </script>
 </body>
 </html>
