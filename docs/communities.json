@@ -1,0 +1,18 @@
+[
+  {
+    "name": "Sample: Neighborhood Dog Park",
+    "type": "Dog park",
+    "description": "Replace this with a real park near you.",
+    "link": "",
+    "zipPrefix": "",
+    "lat": 47.38,
+    "lon": -122.23
+  },
+  {
+    "name": "Sample: Weekend Walking Group",
+    "type": "Meetup group",
+    "description": "Replace this with a real group, and paste its page in the link field.",
+    "link": "https://example.com",
+    "zipPrefix": ""
+  }
+]

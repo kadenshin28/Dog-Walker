@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Location</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="api.js"></script>
+</head>
+<body>
+  <h1>📍 Where are you?</h1>
+
+  <form id="zip-form">
+    <label for="zip">ZIP code</label>
+    <input
+      type="text"
+      id="zip"
+      name="zip"
+      inputmode="numeric"
+      pattern="[0-9]{5}"
+      maxlength="5"
+      autocomplete="postal-code"
+      placeholder="e.g. 12345"
+      required
+    >
+
+    <button type="submit" class="save-button">Save location</button>
+    <p id="zip-message"></p>
+  </form>
+
+  <div class="card">
+    <a href="setup.html" class="next-button">← Back to Setup</a>
+  </div>
+
+  <script>
+    const zipForm = document.getElementById("zip-form");
+    const zipInput = document.getElementById("zip");
+    const zipMessage = document.getElementById("zip-message");
+
+    // Only allow digits while typing
+    zipInput.addEventListener("input", () => {
+      zipInput.value = zipInput.value.replace(/\D/g, "");
+    });
+
+    // Pre-fill if a ZIP was already saved
+    async function loadZip() {
+      try {
+        const response = await fetch("/api/location");
+        const location = await response.json();
+        if (location.zip) zipInput.value = location.zip;
+      } catch (err) {
+        // Not a big deal if this fails; the field just stays empty
+      }
+    }
+
+    // Save the ZIP code
+    zipForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      zipMessage.textContent = "Saving...";
+
+      try {
+        const response = await fetch("/api/location", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ zip: zipInput.value }),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          zipMessage.textContent = data.error || "Something went wrong.";
+          return;
+        }
+
+        window.location.href = "homepage.html";
+      } catch (err) {
+        zipMessage.textContent = "Could not reach the server.";
+      }
+    });
+
+    loadZip();
+  </script>
+</body>
+</html>

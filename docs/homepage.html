@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome Back</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="api.js"></script>
+</head>
+<body>
+  <div class="layout">
+
+    <!-- Left sidebar: one profile card per dog -->
+    <aside id="sidebarL">
+      <h2>The Dog Pack</h2>
+      <div id="dog-profiles"></div>
+      <a href="setup.html" class="next-button">➕ Add a dog</a>
+      <a href="location.html" class="next-button">📍 Change ZIP</a>
+    </aside>
+
+      <!-- Right sidebar: communities nearby -->
+    <aside id="communities">
+      <h2>🏞️ Doggy Network</h2>
+      <p id="communities-sub" class="place-distance"></p>
+      <div id="communities-list">Looking nearby...</div>
+
+      <!-- Opens Google Maps with a dog park search for your ZIP -->
+      <a id="maps-link" class="next-button" target="_blank" rel="noopener"
+         href="https://www.google.com/maps/search/dog+parks+near+me">🗺️ Find dog parks in Google Maps</a>
+    </aside>
+    <!-- Main content, centered on the page -->
+    <main>
+      <h1>Welcome back, <span id="dog-names">friend</span>! 🐕</h1>
+
+      <div class="card" id="weather-card">
+        <p id="weather">Loading weather...</p>
+        <p id="tip"></p>
+      </div>
+
+      <div class="card" id="stats-card">
+        <h2>📊 Total Walk Stats</h2>
+        <div id="stats-list">Loading stats...</div>
+      </div>
+    </main>
+
+  </div>
+
+  <script>
+    // Turns ["Buddy", "Luna", "Max"] into "Buddy, Luna, and Max"
+    function joinNames(names) {
+      let result = "";
+
+      for (let i = 0; i < names.length; i++) {
+        result += names[i];
+
+        const isLast = i === names.length - 1;
+        const isSecondToLast = i === names.length - 2;
+
+        if (isLast) {
+          // nothing after the last name
+        } else if (isSecondToLast) {
+          // 2 names: "A and B", 3+ names: "A, B, and C"
+          result += names.length === 2 ? " and " : ", and ";
+        } else {
+          result += ", ";
+        }
+      }
+
+      return result;
+    }
+
+    // 3725 seconds -> "1h 2m", 725 -> "12m 5s", 45 -> "45s"
+    function formatDuration(totalSeconds) {
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      if (h > 0) return h + "h " + m + "m";
+      if (m > 0) return m + "m " + s + "s";
+      return s + "s";
+    }
+
+    // 1609 meters -> "1.00 mi"
+    function formatMiles(meters) {
+      return (meters / 1609.344).toFixed(2) + " mi";
+    }
+
+    // Turns Open-Meteo's weather code into words that fit "with ___"
+    function describeWeather(code) {
+      if (code === 0) return "clear skies";
+      if (code === 1) return "mostly clear skies";
+      if (code === 2) return "partly cloudy skies";
+      if (code === 3) return "overcast skies";
+      if (code === 45 || code === 48) return "fog";
+      if (code >= 51 && code <= 57) return "drizzle";
+      if (code === 66 || code === 67) return "freezing rain";
+      if (code >= 61 && code <= 65) return "rain";
+      if (code >= 71 && code <= 77) return "snow";
+      if (code >= 80 && code <= 82) return "rain showers";
+      if (code === 85 || code === 86) return "snow showers";
+      if (code >= 95) return "thunderstorms";
+      return "unknown conditions";
+    }
+
+    // Extra sentence part about daylight (empty during the day)
+    function describeDaylight(daylight) {
+      if (daylight === "getting_dark") return "It's getting dark, bring a flashlight";
+      if (daylight === "dark") return "It's dark, if you walk, bring a flashlight";
+      if (daylight === "getting_bright") return "It's getting bright, wait a little bit";
+      return "";
+    }
+
+    // Tip about what the dogs need, based on the temperature
+    function describeTemp(temperature, names) {
+      if (names.length === 0) {
+        if (temperature < 50) return "Bring a sweater.";
+        if (temperature > 75) return "Bring water.";
+        return "";
+      }
+
+      const namesText = joinNames(names);
+      const verb = names.length === 1 ? "needs" : "need";
+      if (temperature < 25) return "Keep " + namesText + "inside, it is way too cold.";
+      if (temperature < 50) return namesText + " " + verb + " a sweater.";
+      if (temperature > 85) return "Keep " + namesText + "inside, it is way too hot.";
+      if (temperature > 75) return namesText + " " + verb + " water.";
+      return ""; // 50 to 75 degrees: no tip
+    }
+
+    // Builds the sidebar: one clickable card per dog
+    function showDogProfiles(dogs) {
+      const container = document.getElementById("dog-profiles");
+      container.innerHTML = "";
+
+      for (const dog of dogs) {
+        const link = document.createElement("a");
+        link.className = "dog-link";
+        link.href = "profile.html?id=" + encodeURIComponent(dog.id);
+
+        if (dog.picture) {
+          const img = document.createElement("img");
+          img.src = dog.picture;
+          img.alt = dog.name;
+          link.appendChild(img);
+        } else {
+          const fallback = document.createElement("div");
+          fallback.className = "dog-fallback";
+          fallback.textContent = "🐶";
+          link.appendChild(fallback);
+        }
+
+        const name = document.createElement("span");
+        name.textContent = dog.name;
+        link.appendChild(name);
+
+        container.appendChild(link);
+      }
+    }
+
+    // Shows the dog names + sidebar, and returns the names as a list
+    async function loadNames() {
+      try {
+        const response = await fetch("/api/dogs");
+        const dogs = await response.json();
+
+        showDogProfiles(dogs);
+
+        if (dogs.length > 0) {
+          const names = dogs.map((dog) => dog.name);
+          const text = joinNames(names);
+
+          document.getElementById("dog-names").textContent = text;
+          document.title = "Welcome Back " + text;
+          return names;
+        }
+      } catch (err) {
+        // If it fails, the page keeps the default "friend"
+      }
+      return [];
+    }
+
+    async function loadWeather(names) {
+      const weatherEl = document.getElementById("weather");
+      const tipEl = document.getElementById("tip");
+
+      try {
+        const response = await fetch("/api/weather");
+        const data = await response.json();
+
+        if (!response.ok) {
+          weatherEl.textContent = data.error;
+          return;
+        }
+
+        let sentence =
+          "It is " + data.temperature + " degrees with " +
+          describeWeather(data.code) ;
+
+        const daylightText = describeDaylight(data.daylight);
+        if (daylightText) {
+          sentence += ". " + daylightText;
+        }
+        weatherEl.textContent = sentence + ".";
+
+        tipEl.textContent = describeTemp(data.temperature, names);
+      } catch (err) {
+        weatherEl.textContent = "Weather unavailable right now.";
+      }
+    }
+
+    // Shows each dog's total time and miles walked
+    // Shows each dog's total time and miles walked, as a table
+async function loadStats() {
+  const listEl = document.getElementById("stats-list");
+
+  try {
+    const response = await fetch("/api/stats");
+    const stats = await response.json();
+
+    listEl.innerHTML = "";
+
+    if (stats.length === 0) {
+      listEl.textContent = "Add a dog to see walk stats.";
+      return;
+    }
+
+    const table = document.createElement("table");
+    table.className = "stats-table";
+
+    // Header row
+    const headRow = table.createTHead().insertRow();
+    for (const label of ["Dog", "Time", "Miles", "Walks"]) {
+      const th = document.createElement("th");
+      th.textContent = label;
+      headRow.appendChild(th);
+    }
+
+    // One row per dog
+    const body = table.createTBody();
+    for (const dog of stats) {
+      const row = body.insertRow();
+
+      // The name links to that dog's profile
+      const nameCell = row.insertCell();
+      const link = document.createElement("a");
+      link.href = "profile.html?id=" + encodeURIComponent(dog.dogId);
+      link.textContent = dog.name;
+      nameCell.appendChild(link);
+
+      const hasWalks = dog.walks > 0;
+      row.insertCell().textContent = hasWalks ? formatDuration(dog.seconds) : "–";
+      row.insertCell().textContent = hasWalks ? (dog.meters / 1609.344).toFixed(2) : "–";
+      row.insertCell().textContent = dog.walks;
+    }
+
+    // Total row, only useful with more than one dog
+    if (stats.length > 1) {
+      const totalSeconds = stats.reduce((sum, d) => sum + d.seconds, 0);
+      const totalMeters = stats.reduce((sum, d) => sum + d.meters, 0);
+      const totalWalks = stats.reduce((sum, d) => sum + d.walks, 0);
+
+      const footRow = table.createTFoot().insertRow();
+      footRow.insertCell().textContent = "Total";
+      footRow.insertCell().textContent = totalWalks ? formatDuration(totalSeconds) : "–";
+      footRow.insertCell().textContent = totalWalks ? (totalMeters / 1609.344).toFixed(2) : "–";
+      footRow.insertCell().textContent = totalWalks;
+    }
+
+    listEl.appendChild(table);
+  } catch (err) {
+    listEl.textContent = "Could not load stats.";
+  }
+}
+// Shows dog parks near the saved ZIP code in the right sidebar
+// Shows the matching communities in the right sidebar
+async function loadCommunities() {
+  const listEl = document.getElementById("communities-list");
+  const subEl = document.getElementById("communities-sub");
+
+  try {
+    const response = await fetch("/api/communities");
+    const data = await response.json();
+
+    if (!response.ok) {
+      listEl.textContent = data.error;
+      return;
+    }
+
+    // Point the Google Maps button at your ZIP code
+    document.getElementById("maps-link").href =
+      "https://www.google.com/maps/search/?api=1&query=" +
+      encodeURIComponent("dog parks near " + data.zip);
+
+  subEl.textContent =
+  data.source === "osm"
+    ? "Dog parks near you, from OpenStreetMap"
+    : "Dog-friendly places and groups near you";
+    listEl.innerHTML = "";
+
+    if (data.places.length === 0) {
+      listEl.textContent = "Nothing listed for your area yet.";
+      return;
+    }
+
+       for (const place of data.places) {
+      const item = document.createElement("div");
+      item.className = "place";
+
+      // The name is a link if the entry has one
+      let nameEl;
+      if (place.link) {
+        nameEl = document.createElement("a");
+        nameEl.href = place.link;
+        nameEl.target = "_blank";
+        nameEl.rel = "noopener";
+      } else {
+        nameEl = document.createElement("strong");
+      }
+      nameEl.textContent = place.name;
+      item.appendChild(nameEl);
+
+      if (place.type) {
+        const typeEl = document.createElement("span");
+        typeEl.className = "place-type";
+        typeEl.textContent = place.type;
+        item.appendChild(typeEl);
+      }
+
+      // Miles away (only for entries that have coordinates)
+      if (place.meters !== null) {
+        const milesEl = document.createElement("div");
+        milesEl.className = "place-distance";
+        milesEl.textContent = "📍 " + formatMiles(place.meters) + " away";
+        item.appendChild(milesEl);
+      }
+
+      if (place.description) {
+        const descEl = document.createElement("div");
+        descEl.className = "place-distance";
+        descEl.textContent = place.description;
+        item.appendChild(descEl);
+      }
+
+      listEl.appendChild(item);
+    }
+  } catch (err) {
+    listEl.textContent = "Communities unavailable right now.";
+  }
+  
+}
+
+    // Load the names first, then the weather and stats
+    async function start() {
+      loadCommunities();
+      const names = await loadNames();
+      await loadWeather(names);
+      await loadStats();
+    }
+
+    start();
+  </script>
+</body>
+</html>

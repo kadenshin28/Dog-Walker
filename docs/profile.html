@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Profile</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="api.js"></script>
+</head>
+<body>
+  <h1>Profile</h1>
+
+  <div class="card profile-card">
+    <div id="profile-picture-area"></div>
+    <h2 id="profile-name">Loading...</h2>
+    <p id="profile-breed"></p>
+  </div>
+
+  <!-- Walk tracker -->
+  <div class="card" id="tracker-card" hidden>
+    <h2>🦮 Walk tracker</h2>
+    <div id="timer">00:00:00</div>
+    <div id="distance">0.00 mi</div>
+    <p id="gps-status"></p>
+    <button type="button" id="walk-button" class="save-button">▶ Start walk</button>
+    <p id="tracker-message"></p>
+
+    <p id="total-walked"></p>
+    <ul id="walk-list"></ul>
+  </div>
+
+  <div class="card">
+    <a href="homepage.html" class="next-button">← Back to the Dog Pack</a>
+  </div>
+
+  <script>
+    const dogId = new URLSearchParams(window.location.search).get("id");
+    const startKey = "walkStart:" + dogId;     // remembers a walk in progress
+    const metersKey = "walkMeters:" + dogId;   // remembers its distance so far
+
+    const timerEl = document.getElementById("timer");
+    const distanceEl = document.getElementById("distance");
+    const gpsStatus = document.getElementById("gps-status");
+    const walkButton = document.getElementById("walk-button");
+    const trackerMessage = document.getElementById("tracker-message");
+    const totalEl = document.getElementById("total-walked");
+    const walkList = document.getElementById("walk-list");
+
+    // GPS settings
+    const MAX_ACCURACY_M = 30;   // ignore readings less accurate than 30 meters
+    const MIN_STEP_M = 5;        // ignore movements smaller than 5 meters (GPS jitter)
+
+    let startTime = null;   // when the current walk began (milliseconds)
+    let tickId = null;      // the repeating clock
+    let watchId = null;     // the GPS watcher
+    let wakeLock = null;    // keeps the screen awake
+    let lastPoint = null;   // last accepted GPS point
+    let totalMeters = 0;    // distance so far in this walk
+
+    // ---------- Formatting ----------
+
+    // 3725 seconds -> "01:02:05"
+    function formatClock(totalSeconds) {
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+    }
+
+    // 3725 seconds -> "1h 2m", 725 -> "12m 5s", 45 -> "45s"
+    function formatDuration(totalSeconds) {
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      if (h > 0) return h + "h " + m + "m";
+      if (m > 0) return m + "m " + s + "s";
+      return s + "s";
+    }
+
+    // 1609 meters -> "1.00 mi"
+    function formatMiles(meters) {
+      return (meters / 1609.344).toFixed(2) + " mi";
+    }
+
+    // ---------- GPS ----------
+
+    // Distance between two GPS points in meters (the "haversine" formula)
+    function distanceMeters(a, b) {
+      const R = 6371000; // Earth's radius in meters
+      const toRad = (deg) => (deg * Math.PI) / 180;
+      const dLat = toRad(b.lat - a.lat);
+      const dLon = toRad(b.lon - a.lon);
+      const h =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(h));
+    }
+
+    function updateDistance() {
+      distanceEl.textContent = formatMiles(totalMeters);
+    }
+
+    function onPosition(pos) {
+      const accuracy = pos.coords.accuracy;
+
+      // Skip weak readings so a dog sitting still doesn't "walk"
+      if (accuracy > MAX_ACCURACY_M) {
+        gpsStatus.textContent = "GPS: weak signal (±" + Math.round(accuracy) + " m)";
+        return;
+      }
+      gpsStatus.textContent = "GPS: tracking ✓";
+
+      const point = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+
+      if (lastPoint) {
+        const step = distanceMeters(lastPoint, point);
+        if (step < MIN_STEP_M) return;   // too small: probably jitter
+        totalMeters += step;
+        try { localStorage.setItem(metersKey, String(totalMeters)); } catch (err) {}
+        updateDistance();
+      }
+      lastPoint = point;
+    }
+
+    function onGpsError(err) {
+      if (err.code === 1) {
+        gpsStatus.textContent = "Location is blocked, so only time is tracked.";
+      } else if (err.code === 2) {
+        gpsStatus.textContent = "Can't find a location right now. Timing only.";
+      }
+      // code 3 is just a timeout: keep waiting
+    }
+
+    function startGps() {
+      if (!("geolocation" in navigator)) {
+        gpsStatus.textContent = "GPS isn't available here, so only time is tracked.";
+        return;
+      }
+      gpsStatus.textContent = "GPS: looking for a signal...";
+      watchId = navigator.geolocation.watchPosition(onPosition, onGpsError, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 15000,
+      });
+    }
+
+    function stopGps() {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      gpsStatus.textContent = "";
+    }
+
+    // Ask the phone to keep the screen on (page tracking stops if it locks)
+    async function keepScreenOn() {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await navigator.wakeLock.request("screen");
+        }
+      } catch (err) {
+        // Not supported or denied: no big deal
+      }
+    }
+
+    function releaseScreen() {
+      try {
+        if (wakeLock) wakeLock.release();
+      } catch (err) {}
+      wakeLock = null;
+    }
+
+    // The screen lock is dropped when you leave the page, so ask again on return
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && startTime !== null) {
+        keepScreenOn();
+      }
+    });
+
+    // ---------- Walk timer ----------
+
+    // Shows how much time has passed since the walk started
+    function updateClock() {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      timerEl.textContent = formatClock(elapsed);
+    }
+
+    function beginWalkSession() {
+      updateClock();
+      updateDistance();
+      tickId = setInterval(updateClock, 1000);
+      walkButton.textContent = "■ Stop & save walk";
+      walkButton.classList.add("stop-button");
+      startGps();
+      keepScreenOn();
+    }
+
+    function startWalk() {
+      startTime = Date.now();
+      totalMeters = 0;
+      lastPoint = null;
+      try {
+        localStorage.setItem(startKey, String(startTime));
+        localStorage.setItem(metersKey, "0");
+      } catch (err) {}
+      trackerMessage.textContent = "";
+      beginWalkSession();
+    }
+
+    async function stopWalk() {
+      clearInterval(tickId);
+      stopGps();
+      releaseScreen();
+
+      const seconds = Math.floor((Date.now() - startTime) / 1000);
+      const startedAt = startTime;
+      const meters = Math.round(totalMeters);
+
+      startTime = null;
+      totalMeters = 0;
+      lastPoint = null;
+      try {
+        localStorage.removeItem(startKey);
+        localStorage.removeItem(metersKey);
+      } catch (err) {}
+
+      timerEl.textContent = "00:00:00";
+      distanceEl.textContent = "0.00 mi";
+      walkButton.textContent = "▶ Start walk";
+      walkButton.classList.remove("stop-button");
+
+      if (seconds < 1) {
+        trackerMessage.textContent = "That walk was too short to save.";
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/dogs/" + encodeURIComponent(dogId) + "/walks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ seconds, startedAt, meters }),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          trackerMessage.textContent = data.error || "Could not save the walk.";
+          return;
+        }
+
+        trackerMessage.textContent =
+          "Saved a " + formatDuration(data.seconds) + " walk (" +
+          formatMiles(data.meters || 0) + ")! 🎉";
+        loadWalks();
+      } catch (err) {
+        trackerMessage.textContent = "Could not reach the server.";
+      }
+    }
+
+    walkButton.addEventListener("click", () => {
+      if (startTime === null) {
+        startWalk();
+      } else {
+        stopWalk();
+      }
+    });
+
+    // ---------- Saved walks ----------
+
+    // Shows the totals and the 10 most recent walks
+    async function loadWalks() {
+      try {
+        const response = await fetch("/api/dogs/" + encodeURIComponent(dogId) + "/walks");
+        const walks = await response.json();
+
+        const totalSeconds = walks.reduce((sum, w) => sum + w.seconds, 0);
+        const totalMetersAll = walks.reduce((sum, w) => sum + (w.meters || 0), 0);
+
+        if (walks.length === 0) {
+          totalEl.textContent = "No walks yet.";
+        } else {
+          totalEl.textContent =
+            "Total walked: " + formatDuration(totalSeconds) + ", " +
+            formatMiles(totalMetersAll) + " (" + walks.length +
+            (walks.length === 1 ? " walk)" : " walks)");
+        }
+
+        walkList.innerHTML = "";
+        const recent = walks.slice().reverse().slice(0, 10);
+
+        for (const walk of recent) {
+          const li = document.createElement("li");
+          const when = new Date(walk.startedAt).toLocaleString([], {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          });
+
+          const whenEl = document.createElement("span");
+          whenEl.textContent = when;
+
+          const lengthEl = document.createElement("strong");
+          lengthEl.textContent = walk.meters
+            ? formatDuration(walk.seconds) + " · " + formatMiles(walk.meters)
+            : formatDuration(walk.seconds);
+
+          li.appendChild(whenEl);
+          li.appendChild(lengthEl);
+          walkList.appendChild(li);
+        }
+      } catch (err) {
+        totalEl.textContent = "Could not load walks.";
+      }
+    }
+
+    // ---------- Dog info ----------
+
+    async function loadProfile() {
+      const nameEl = document.getElementById("profile-name");
+      const breedEl = document.getElementById("profile-breed");
+      const pictureArea = document.getElementById("profile-picture-area");
+
+      try {
+        const response = await fetch("/api/dogs");
+        const dogs = await response.json();
+
+        // ids are numbers in the file but text in the address, so compare as text
+        const dog = dogs.find((d) => String(d.id) === dogId);
+
+        if (!dog) {
+          nameEl.textContent = "Dog not found";
+          return;
+        }
+
+        nameEl.textContent = dog.name;
+        breedEl.textContent = dog.breed;
+        document.title = dog.name + "'s Profile";
+
+        if (dog.picture) {
+          const img = document.createElement("img");
+          img.src = dog.picture;
+          img.alt = dog.name;
+          img.className = "profile-picture";
+          pictureArea.appendChild(img);
+        } else {
+          const fallback = document.createElement("div");
+          fallback.className = "profile-picture profile-fallback";
+          fallback.textContent = "🐶";
+          pictureArea.appendChild(fallback);
+        }
+
+        // Show the tracker now that we know the dog exists
+        document.getElementById("tracker-card").hidden = false;
+
+        // If a walk was already running when the page was closed, pick it back up
+        try {
+          const saved = Number(localStorage.getItem(startKey));
+          if (saved) {
+            startTime = saved;
+            totalMeters = Number(localStorage.getItem(metersKey)) || 0;
+            beginWalkSession();
+          }
+        } catch (err) {}
+
+        loadWalks();
+      } catch (err) {
+        nameEl.textContent = "Could not load this profile.";
+      }
+    }
+
+    loadProfile();
+  </script>
+</body>
+</html>

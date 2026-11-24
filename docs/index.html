@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dog Walker</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="api.js"></script>
+</head>
+<body>
+  <h1>🐕 Dog Walker</h1>
+  <p style="text-align: center;">Loading...</p>
+
+  <script>
+    async function go() {
+      try {
+        const response = await fetch("/api/dogs");
+        const dogs = await response.json();
+        location.replace(dogs.length > 0 ? "homepage.html" : "setup.html");
+      } catch (err) {
+        location.replace("setup.html");
+      }
+    }
+    go();
+  </script>
+</body>
+</html>
